@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: "PingFang SC", sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #fff; }
+    .nav-bar { display: flex; border-bottom: 1px solid #eee; background: #fff; flex-shrink: 0; align-items: center; height: 42px; }
+    .tabs { display: flex; flex: 1; }
+    .tab { flex: 1; padding: 12px 0; text-align: center; font-size: 13px; cursor: pointer; color: #666; }
+    .tab.active { color: #1890ff; font-weight: bold; border-bottom: 2px solid #1890ff; }
+    .refresh-btn { padding: 0 12px; cursor: pointer; color: #1890ff; font-size: 12px; border-left: 1px solid #eee; height: 42px; line-height: 42px; user-select: none; display: flex; align-items: center; gap: 3px; }
+    .refresh-btn:hover { background: #f0f7ff; }
+    .refresh-btn.loading svg { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .minimize-btn { padding: 0 15px; cursor: pointer; color: #1890ff; font-size: 12px; border-left: 1px solid #eee; height: 42px; line-height: 42px; user-select: none; }
+    .minimize-btn:hover { background: #f9f9f9; }
+    .retry-wrap { text-align: center; padding: 40px 20px; color: #999; font-size: 13px; }
+    .retry-wrap .error-msg { margin-bottom: 16px; line-height: 1.6; }
+    .retry-wrap .retry-btn { display: inline-block; padding: 6px 20px; background: #1890ff; color: #fff; border-radius: 4px; cursor: pointer; font-size: 13px; border: none; }
+    .retry-wrap .retry-btn:hover { background: #40a9ff; }
+    .container { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 100px; border-right: 1px solid #eee; background: #fafafa; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; }
+    .side-list { flex: 1; overflow-y: auto; }
+    .edit-table-btn { padding: 10px 5px; font-size: 11px; text-align: center; color: #1890ff; cursor: pointer; border-top: 1px solid #eee; flex-shrink: 0; font-weight: 500; }
+    .edit-table-btn:hover { background: #f0f7ff; }
+    .side-item { padding: 12px 5px; font-size: 11px; cursor: pointer; text-align: center; border-bottom: 1px solid #eee; }
+    .side-item.active { background: #fff; color: #1890ff; font-weight: bold; border-left: 3px solid #1890ff; }
+    .side-item img { width: 34px; height: 34px; border-radius: 50%; display: block; margin: 0 auto 5px; background: #eee; object-fit: cover; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+    .header { padding: 12px; border-bottom: 1px solid #eee; font-size: 13px; font-weight: bold; background: #fff; position: sticky; top: 0; z-index: 1; }
+    .content { padding: 12px; }
+    .card { border: 1px solid #eee; border-radius: 8px; padding: 10px; margin-bottom: 10px; position: relative; background: #fff; cursor: pointer; }
+    .card:hover { border-color: #1890ff; background: #f0f7ff; }
+    .label { color: #999; font-size: 10px; margin-bottom: 4px; pointer-events: none; }
+    .val { color: #333; font-size: 12px; word-break: break-all; padding-right: 45px; line-height: 1.4; font-weight: 500; pointer-events: none; }
+    .copy-btn { position: absolute; right: 10px; top: 10px; font-size: 10px; color: #1890ff; cursor: pointer; padding: 2px 6px; border: 1px solid #1890ff; border-radius: 4px; background: #fff; z-index: 2; }
+    .card-img { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; display: block; margin-top: 4px; background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <div class="nav-bar">
+    <div class="tabs">
+      <div class="tab active" id="tab-user" onclick="switchTab('user')">员工信息</div>
+      <div class="tab" id="tab-company" onclick="switchTab('company')">行业公司</div>
+      <div class="tab" id="tab-custom" onclick="switchTab('custom')">常用自定义</div>
+    </div>
+    <div class="refresh-btn" id="refresh-btn" onclick="refreshData()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+      <span>刷新</span>
+    </div>
+    <div class="minimize-btn" id="toggle-btn" onclick="toggleView()">收起 ↑</div>
+  </div>
+  
+  <div class="container" id="main-container">
+    <div class="sidebar">
+      <div class="side-list" id="sidebar"></div>
+      <div class="edit-table-btn" onclick="window.open('https://wvyeimw605u.feishu.cn/base/Mx7UbgdiiaRngAsy7lhcxn9Xngd?table=tbl0P22GJ3wYTB3H&view=vewrSLbaX5', '_blank')">编辑表格↗️</div>
+    </div>
+    <div class="main">
+      <div class="header" id="curName">详情</div>
+      <div class="content" id="content">加载数据中...</div>
+    </div>
+  </div>
+
+  <script>
+    let userDb = [], companyDb = [], customDb = [];
+    let curIdx = 0, currentTab = 'user', isCollapsed = false;
+
+    function toggleView() {
+      isCollapsed = !isCollapsed;
+      const btn = document.getElementById('toggle-btn');
+      const container = document.getElementById('main-container');
+      if (isCollapsed) {
+        container.style.display = 'none';
+        btn.innerText = '展开 ↓';
+        parent.postMessage({ pluginMessage: { type: 'resize', value: 80 } }, '*');
+      } else {
+        container.style.display = 'flex';
+        btn.innerText = '收起 ↑';
+        parent.postMessage({ pluginMessage: { type: 'resize', value: 600 } }, '*');
+      }
+    }
+
+    async function loadData() {
+      const base = { "appId": "cli_a9fb3bd29a399cef", "appSecret": "hY003q1qv20BQi2YcwZPOhTcCrRvwIBE", "appToken": "Mx7UbgdiiaRngAsy7lhcxn9Xngd", "pageSize": 500 };
+      const url = 'https://dev-api.linggongguanjia.com/qtbCert/api/feishu/bitable/records';
+      const refreshBtn = document.getElementById('refresh-btn');
+      refreshBtn.classList.add('loading');
+      document.getElementById('content').innerText = '加载数据中...';
+      try {
+        const [uRes, cRes, cuRes] = await Promise.all([
+          fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...base, "tableId": "tblZTzjmf5Q1ZFNU", "viewId": "vewKpMZUvV"}) }),
+          fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...base, "tableId": "tblwXDWllTI9fftL", "viewId": "vewxucykd2"}) }),
+          fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...base, "tableId": "tbl0P22GJ3wYTB3H", "viewId": "vewrSLbaX5"}) })
+        ]);
+        const [uJson, cJson, cuJson] = await Promise.all([uRes.json(), cRes.json(), cuRes.json()]);
+        if (!uJson.data || !cJson.data || !cuJson.data) {
+          const errMsg = uJson.msg || cJson.msg || cuJson.msg || '接口返回数据异常';
+          throw new Error(errMsg);
+        }
+        userDb = uJson.data.items || [];
+        companyDb = cJson.data.items || [];
+        customDb = cuJson.data.items || [];
+        render();
+      } catch (e) {
+        console.error('loadData error:', e);
+        document.getElementById('content').innerHTML = `
+          <div class="retry-wrap">
+            <div class="error-msg">获取失败：${e.message || '网络异常'}<br>请点击重试或顶部刷新按钮</div>
+            <button class="retry-btn" onclick="refreshData()">重新加载</button>
+          </div>`;
+      } finally {
+        refreshBtn.classList.remove('loading');
+      }
+    }
+
+    function refreshData() {
+      curIdx = 0;
+      loadData();
+    }
+
+    function switchTab(t) {
+      if (isCollapsed) toggleView();
+      currentTab = t; curIdx = 0;
+      document.getElementById('tab-user').className = `tab ${t === 'user' ? 'active' : ''}`;
+      document.getElementById('tab-company').className = `tab ${t === 'company' ? 'active' : ''}`;
+      document.getElementById('tab-custom').className = `tab ${t === 'custom' ? 'active' : ''}`;
+      render();
+    }
+
+    function render() {
+      let db = currentTab === 'user' ? userDb : (currentTab === 'company' ? companyDb : customDb);
+      if (db.length === 0) return;
+
+      const side = document.getElementById('sidebar');
+      side.innerHTML = db.map((item, i) => {
+        const f = item.fields;
+        
+        // 核心逻辑：常用自定义不渲染图标
+        let imgHtml = '';
+        if (currentTab !== 'custom') {
+          let img = currentTab === 'user' ? f["头像链接"] : f["品牌logo"];
+          if (Array.isArray(img)) img = img[0].url;
+          imgHtml = `<img src="${String(img || '').replace('http://', 'https://') || 'https://via.placeholder.com/34'}">`;
+        }
+        
+        // 常用自定义页签显示“分组”字段
+        let title = '';
+        if (currentTab === 'user') title = f["姓名"] || '无姓名';
+        else if (currentTab === 'company') title = f["品牌名称"] || f["门店"] || '无公司名';
+        else title = f["分组"] || '未命名';
+
+        return `<div class="side-item ${i === curIdx ? 'active' : ''}" onclick="changeItem(${i})">
+          ${imgHtml}
+          <span>${title}</span>
+        </div>`;
+      }).join('');
+
+      const currentFields = db[curIdx].fields;
+      document.getElementById('curName').innerText = currentTab === 'user' ? (currentFields["姓名"] || '详情') : (currentTab === 'company' ? (currentFields["品牌名称"] || '公司详情') : (currentFields["分组"] || '详情'));
+
+      const topFields = currentTab === 'user' ? ["头像链接", "姓名", "手机"] : (currentTab === 'company' ? ["品牌logo", "门店", "品牌名称"] : []);
+      const allKeys = Object.keys(currentFields);
+      const sortedKeys = allKeys.sort((a, b) => {
+        const indexA = topFields.indexOf(a);
+        const indexB = topFields.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        return indexA !== -1 ? -1 : (indexB !== -1 ? 1 : 0);
+      });
+
+      const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'];
+      const imageKeywords = ["图片", "头像", "logo", "图标", "image", "img", "icon"];
+
+      function extractImageUrl(val) {
+        if (Array.isArray(val)) val = val[0]?.url || val[0];
+        if (typeof val === 'object' && val !== null) val = val.url || val.text || '';
+        val = String(val || '').replace('http://', 'https://');
+        return val.startsWith('https://') ? val : '';
+      }
+      function isImageValue(key, val) {
+        const lower = key.toLowerCase();
+        if (imageKeywords.some(kw => lower.includes(kw.toLowerCase()))) return true;
+        const url = extractImageUrl(val).toLowerCase();
+        return url && imageExts.some(ext => url.split('?')[0].endsWith(ext));
+      }
+
+      document.getElementById('content').innerHTML = sortedKeys.map(key => {
+        let val = currentFields[key];
+
+        if (isImageValue(key, val)) {
+          const imgUrl = extractImageUrl(val);
+          if (!imgUrl) return "";
+          return `
+            <div class="card" onclick="doImageFill('${imgUrl}')">
+              <div class="copy-btn" onclick="copyText(event, '${imgUrl}')">复制</div>
+              <div class="label">${key}</div>
+              <img class="card-img" src="${imgUrl}">
+            </div>`;
+        }
+
+        if (Array.isArray(val)) val = val.map(v => typeof v === 'object' ? (v.text || v.name || '') : v).join(', ');
+        else if (typeof val === 'object' && val !== null) val = val.text || val.name || JSON.stringify(val);
+
+        if (!val) return "";
+
+        return `
+          <div class="card" onclick="doFill('${val}')">
+            <div class="copy-btn" onclick="copyText(event, '${val}')">复制</div>
+            <div class="label">${key}</div>
+            <div class="val">${val}</div>
+          </div>`;
+      }).join('');
+    }
+
+    window.copyText = (e, t) => {
+      e.stopPropagation();
+      const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select();
+      document.execCommand('copy'); document.body.removeChild(el);
+      parent.postMessage({ pluginMessage: { type: 'notify', message: '📋 已复制文字' } }, '*');
+    };
+
+    window.doFill = (v) => parent.postMessage({ pluginMessage: { type: 'force-fill', value: String(v) } }, '*');
+
+    window.doImageFill = async (url) => {
+      try {
+        parent.postMessage({ pluginMessage: { type: 'notify', message: '图片加载中...' } }, '*');
+        const res = await fetch(url);
+        const buffer = await res.arrayBuffer();
+        const bytes = Array.from(new Uint8Array(buffer));
+        parent.postMessage({ pluginMessage: { type: 'image-fill', value: bytes } }, '*');
+      } catch (e) {
+        parent.postMessage({ pluginMessage: { type: 'notify', message: '⚠️ 图片获取失败，请重试' } }, '*');
+      }
+    };
+    window.changeItem = (i) => { curIdx = i; render(); };
+    loadData();
+  </script>
+</body>
+</html>
